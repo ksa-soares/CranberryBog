@@ -1,0 +1,1321 @@
+/* TITLE: Cranberry Habitat and Weight Approximation (2001-2025)
+   AUTHOR: Kaylan Soares
+   WORKS CITED:{
+    Armstrong, C. (2019). Cranberries and a Changing Climate. Cooperative Extension: Cranberries. https://extension.umaine.edu/cranberries/grower-services/workshops-and-meetings/cranberries-and-a-changing-climate/ 
+    Atucha, A. (2020). Adjusting Soil pH for Cranberry Production. Cranberry Crop Management Journal, 33(1). https://doi.org/https://fruit.wisc.edu/wp-content/uploads/sites/36/2020/05/CCMJ-4-29-20.pdf 
+    Chasen, E., & Stefan, S. (2019). Linking Growing Degree-Days and Cranberry Plant Phenology, 30(3), 4–6. https://fruit.wisc.edu/wp-content/uploads/sites/36/2019/09/05.22.2019_CCMJ.pdf 
+    DeMoranville, C. J., Davenport, J. R., Patten, K., Roper, T. R., Strik, B. C., Vorsa, N., & Poole, A. P. (2019). Fruit Mass Development in Three Cranberry Cultivars and Five Production Regions. Journal of the American Society for Horticultural Science, 121(4), 680–685. 
+    Evans, E. C., & M Spivak. (2005). Effects of Honey Bee (Hymenoptera: Apidae) and Bumble Bee (Hymenoptera: Apidae) Presence on Cranberry (Ericales: Ericaceae) Pollination. Journal of Economic Entomology, 99(3), 614–620. 
+    Oregon State University. (n.d.). Degree-day calculation methods. https://hopper.science.oregonstate.edu/CalcMethods.html#I1 
+    Stang, E. J. (n.d.). CRANBERRY FRUIT SET: PROBLEMS AND POTENTIALS. University of Wisconsin -  Department of Horticulture. 
+    Ugur, S., Hahn, E., & Mura, J. D. (2021, September 15). High Soil pH: Understanding Plant Nutrition in Cranberries. Wisconsin Fruit. https://fruit.wisc.edu/2021/06/29/high-soil-ph-understanding-plant-nutrition-in-cranberries/ 
+    University of California Agriculture and Natural Resources Statewide Integrated Pest Management Program - UC IPM. (n.d.). Degree Days Single Sine Methods. Degree-Days: Single Sine Methods--UC IPM. https://ipm.ucanr.edu/WEATHER/ddss_tbl.html 
+    University of Maine. (2019, February 6). Maine Cranberry Management Calendar. Cooperative Extension: Cranberries.}
+   PURPOSE: To calculate cranberry habitat change from 2001 - 2005. 
+            To show the reason for cranberry habitat change from 2001-2005.
+            To calculate average cranberry weight from 2001 - 2005.
+*/
+// DATA
+{
+  // IMAGE COLLECTIONS
+    // ERA 5 LAND DAILY AGGREGATES
+      {// SCALE: 11,132 m/px
+        var daily = ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR");}
+    // ERA 5 LAND HOURLY AGGREGATES
+      {// SCALE: 11,132 m/px
+        var hourly = ee.ImageCollection("ECMWF/ERA5_LAND/HOURLY");}
+    // USFS Landscape Change Monitoring System v2024.10 (CONUS and OCONUS)
+      {// SCALE: 30 m/px
+        var landscape = ee.ImageCollection("USFS/GTAC/LCMS/v2024-10");}
+    // SOIL
+     {// SCALE: 250 m/ px
+          var pH = ee.Image("OpenLandMap/SOL/SOL_PH-H2O_USDA-4C1A2A_M/v02");}
+    // ELEVATION:
+      {// SCALE: 30 m/ px
+        var dem = ee.ImageCollection("COPERNICUS/DEM/GLO30");}
+      
+  // GEOMETRY
+    // TIGER: US CENSUS STATES 2019
+      var states = ee.FeatureCollection("TIGER/2018/States");
+      var counties = ee.FeatureCollection("TIGER/2018/Counties");
+}
+
+// CALCULATIONS 
+{  // LAYER OUTPUTS:  dormancy, rate, days, dem, pH, water, soil, landcover, landChange, GDD
+ { /*
+    FINAL LAYER UNITS:
+      1. dormancy: hours
+      2. rate: g/ day
+      3. days: days
+      4. dem: m
+      5. pH: pH
+      6. water: %
+      7. soil: refer to source information
+      8. landcover: refer to source information
+      9. landchange: refer to source information
+      10. GDD: degree days
+  */
+}
+// DORMANCY (Chasen & Stefan, 2019)
+  {// LAYER INFORMATION
+    /*  
+      TIME FRAME: 12/01 - 03/01
+      
+      DATA: ERA 5 LAND HOURLY AGGREGATES
+      
+      BANDS: dormancy
+    */
+    // STEPS 
+      {
+      // STEP 1: Filter Image collection by time frame and select the temperature 2m band
+      {
+       var start = ee.Date('2007-12-01');
+       var end = ee.Date('2008-03-01');
+       var imageColl = hourly.select('temperature_2m').filterDate(start, end);
+       var kParams = {
+          min: 250,
+          max: 350,
+        };
+       // Map.addLayer(imageColl, hParams, 'DORMANCY MONTHS HOURLY TEMP (K)')
+      }// END STEP 1
+      
+      // STEP 2: Add a band with temperature values in Celcius
+      {
+       var imageColl = imageColl.map(function(image){
+       var band = image.select('temperature_2m').subtract(273.15).rename('deg_C');
+       return image.addBands(band).set('system:time_start', image.get('system:time_start'))
+       });
+       var cParams = {
+          min: 0,
+          max: 60,
+        };
+      //Map.addLayer(imageColl, cParams, 'DORMANCY MONTHS HOURLY TEMP (C)', false);
+      }// END STEP 2
+      
+     /*  STEP 3: Filter for hours temperature returns less than 7 degrees C and reassign any return
+                 less than 7 deg C with the value of 1
+     */{
+       var imageColl = imageColl.map(function(image){
+       var datamask = image.select('deg_C');
+       var mask = datamask.lt(7.2);
+       return mask.set('system:time_start', image.get('system:time_start'))
+       });
+       //Map.addLayer(imageColl, {}, 'DORMANCY TEMP > 7 DEG C MASK', false);
+      } // END STEP 3
+
+    // STEP 4: Add up hours with temperature returns less than 7 degrees C
+      {
+       var image = imageColl.sum().set('system:time_start', hourly.get('system:time_start'))
+       var dormancy_params = {
+          min: 0,
+          max: 3000,
+        };
+       } // END STEP 4
+       
+    // STEP 5: Make a layer with pixels that have greater than 1,500 hours
+      {
+       var band = image.select('deg_C').multiply(1).rename('dormancy_hours');
+       var image = image.addBands(band).set('system:time_start', image.get('system:time_start'))
+       var dormancy = image.select('dormancy_hours');
+       } // END STEP 5
+
+ } // STEPS
+ 
+      // FINAL LAYER DORMANCY LAYER
+       //Map.addLayer(dormancy, dormancy_params, 'NUMBER OF DORMANCY HOURS', false);
+    }
+  
+// RATE OF FRESH MASS GROWTH (Demoranville et al 2019a)
+  {
+    // LAYER INFORMATION
+    /*
+        R = Rate of fresh fruit mass accumulation after fruit set g/ day 
+        AMT = August average maximum temperature (C)
+        J30D = Number of days in July where the maximum temperature was above 30 deg C
+      
+      DATA: ERA 5 LAND HOURLY AGGREGATES, ERA 5 LAND DAILY AGGREGATES
+      
+      BANDS: days
+      */
+    // STEPS 
+     {
+      // STEP 1: Calculate AMT
+      {
+      // AMT: August Mean Maximum Temperature
+      {
+        // STEP 1: Filter image collection by time frame and select the temperature 2m max band
+        {
+        var start = ee.Date('2008-08-01');
+        var finish = ee.Date('2008-08-31');
+        var imageColl = daily.select('temperature_2m_max').filterDate(start, finish); 
+        // Map.addLayer(imageColl, kParams, 'Maximum August Temp (K)')
+          } // END STEP 1
+          
+        // STEP 2: Make layer that displays mean August maximum temperature 
+        {
+        var mean = imageColl.mean().set('system:time_start', imageColl.get('system:time_start'))
+        var band = mean.select('temperature_2m_max').subtract(273.15).rename('AMT');
+        var mean = mean.addBands(band).set('system:time_start', mean.get('system:time_start'))
+        //Map.addLayer(mean.select('temperature_2m_max'), cParams, 'MAXIMUM AUGUST TEMPERATURE (C)', false);
+        var AMT_Coll = mean.select('AMT');
+        } // END STEP 2
+      } // END CALCULATE AMT
+      
+      // Final AMT Layer
+         //Map.addLayer(AMT_Coll, cParams, 'AUGUST MEAN MAXIMUM TEMPERATURE (C)', false);
+      } // END STEP 1
+      
+      // STEP 2: Calculate J30D
+      {
+      // J30D: Number of days in July where the temperature is above 30 degrees
+      {
+        // STEP 1: Filter image collection by time frame and select the temperature 2m max band
+        {
+        var start = ee.Date('2008-07-01');
+        var end = ee.Date('2008-07-31');
+        var imageColl = daily.select('temperature_2m_max').filterDate(start, end);
+        // Map.addLayer(imageColl, kParams, 'July Maximum Temperature (K)')
+        } // END STEP 1
+        
+        // STEP 2: Filter data from Kelvins to Celcius
+        {
+          var imageColl = imageColl.map(function(image){
+          var band = image.select('temperature_2m_max').subtract(273.15).rename('deg_C');
+          return image.addBands(band);
+        });
+        //Map.addLayer(imageColl, cParams, 'JULY MAXIMUM TEMPERATURE (C)', false);
+        } // END STEP 2
+        
+        /* STEP 3: Filter for days with maximum values greather than 30 deg C
+                   and assign a value for 1 to days that do */
+        {
+        var imageColl = imageColl.map(function(image){
+          var datamask = image.select('deg_C');
+          var mask = datamask.gt(30);
+          return mask.set('system:time_start', image.get('system:time_start'))
+        });
+        //Map.addLayer(imageColl, {}, 'JULY MAX TEMP > 30 DEG C MASK', false);
+        } // END STEP 3
+
+        // STEP 4: Add up number of days with temperature greater than 30 degrees
+        {
+        var J30D = imageColl.sum();
+        var band = J30D.select('deg_C').multiply(1).rename('J30D');
+        var J30D = J30D.addBands(band);
+        var J30D_Coll = J30D.select('J30D');
+        } // END STEP 4
+        
+        // STEP 5: Set vision parameters for the Layer
+        {
+        var monthParams = {
+          min: 0,
+          max: 31,
+        };
+        } // END STEP 5
+        
+      } // END STEPS
+      // Final J30D Layer
+         //Map.addLayer(J30D_Coll, monthParams, 'NUMBER OF DAYS JULY MAX TEMP > 30 DEG C', false);
+      } // END STEP 2
+        
+      // STEP 3: Calculate Rate
+      // Rate: Rate of fresh fruit mass accumulation after fruit set g/ day 
+        {
+        // STEP 1: Bring J30D and AMT into an image collection and turn the collection to bands
+        {
+        var values = [AMT_Coll, J30D_Coll];
+        var imageColl = ee.ImageCollection.fromImages(values);
+        var image = imageColl.toBands().set('system:time_start', image.get('system:time_start'))
+        //Map.addLayer(image, {}, 'RATE CALCULATIONS AMT AND J30D VALUES', false);
+        } // END STEP 1
+
+        // STEP 2: Define values for Rate calculation
+        {
+        var AMT = image.select('0_AMT');
+        var J30D = image.select('1_J30D');
+        var coeff1 = -0.0156;
+        var coeff2 = AMT.multiply(0.0013);
+        var coeff3 = J30D.multiply(-0.0005);
+        } // END STEP 2
+        
+        // STEP 3: Calculate rate
+        {
+        var EQUATION1 = coeff2.add(coeff1).add(coeff3).rename('rate');
+        var image = image.addBands(EQUATION1);
+        var rate = image.select('rate');
+        } // END STEP 3
+        
+        // STEP 4: Set vision parameters for the Layer
+        {
+        var rateParams = {
+          bands: 'rate',
+          min: 0,
+          max: 0.05,
+        };
+       } // END STEP 4
+       
+        }// END STEP 3
+      
+     } // END STEPS
+     
+     // FINAL RATE LAYER
+     //Map.addLayer(rate, rateParams, 'RATE OF FRESH MASS GROWTH g/day', false);
+    }
+    
+// DAYS TO ACCUMULATE 0.5 g OF FRESH FRUIT MASS AFTER FRUITSET (Demoranville et al 2019a)
+  {
+  // LAYER INFORMATION
+  /*  
+      D = Number of days it takes for cranberry to gain an additional 0.5 grams of weight after fruitset
+      A16D = Numer of days in August where the minimum temperature was below 16 deg C
+      JAT = July average temperature (C)
+      AMT = August average maximum temperature (C)
+    
+    DATA: ERA 5 LAND HOURLY AGGREGATES, ERA 5 LAND DAILY AGGREGATES
+      
+    BANDS: days
+  */  
+  // STEPS
+    {
+      // STEP 1: Calculate A16D
+      {
+      // A16D: Numer of days in August where the minimum temperature was below 16 deg C
+      {
+        // STEP 1: Filter image collection by time frame and select the temperature 2m max band
+        {
+        var start = ee.Date('2008-08-01');
+        var end = ee.Date('2008-08-31');
+        var imageColl = daily.select('temperature_2m_min').filterDate(start, end);
+        //Map.addLayer(imageColl, kParams, 'August Minimum Temperature (K)')
+        } // END STEP 1
+        
+        // STEP 2: Filter data from Kelvins to Celcius
+        {
+          var imageColl = imageColl.map(function(image){
+          var band = image.select('temperature_2m_min').subtract(273.15).rename('deg_C');
+          return image.addBands(band);
+        });
+        //Map.addLayer(imageColl, cParams, 'AUGUST MINIMUM TEMPERATURE (C)', false);
+        } // END STEP 2
+        
+        /* STEP 3: Filter for days with maximum values greather than 30 deg C
+                   and assign a value for 1 to days that do */
+        {
+        var imageColl = imageColl.map(function(image){
+          var datamask = image.select('deg_C');
+          var mask = datamask.gt(16);
+          return mask;
+        });
+        //Map.addLayer(imageColl, monthParams, 'MIN AUGUST TEMP < 16 C MASK', false);
+        } // END STEP 3
+
+        // STEP 4: Add up number of days with temperature greater than 30 degrees
+        {
+        var A16D = imageColl.sum();
+        var band = A16D.select('deg_C').multiply(1).rename('A16D');
+        var A16D = A16D.addBands(band);
+        var A16D_Coll = A16D.select('A16D');
+        } // END STEP 4
+
+      } // END STEPS
+      // Final A16D Layer
+         //Map.addLayer(A16D_Coll, monthParams, 'NUMBER OF DAYS AUGUST MIN TEMP < 16 C', false);
+      } // END STEP 1
+      
+      // STEP 2: Calculate JAT
+      {
+      // JAT: July Mean Temperature
+      {
+        // STEP 1: Filter image collection by time frame and select the temperature 2m max band
+        {
+        var start = ee.Date('2008-07-01');
+        var finish = ee.Date('2008-07-31');
+        var imageColl = hourly.select('temperature_2m').filterDate(start, finish); 
+          } // END STEP 1
+          
+        // STEP 2: Make layer that displays mean July temperature 
+        {
+        var mean = imageColl.mean();
+        var band = mean.select('temperature_2m').subtract(273.15).rename('JAT');
+        var mean = mean.addBands(band);
+        //Map.addLayer(mean.select('temperature_2m'), cParams, 'JULY MINIMUM TEMPERATURE (C)', false);
+        var JAT_Coll = mean.select('JAT');
+        } // END STEP 2
+
+      } // END STEPS
+      // Final JAT Layer
+         //Map.addLayer(JAT_Coll, cParams, 'JULY MEAN TEMPERATURE (C)', false);
+      } // END STEP 2
+      
+      // STEP 3: Calculate Days
+      {
+      // Days: Number of days it takes for cranberry to gain an additional 0.5 grams of weight after fruitset 
+        // STEP 1: Bring AMT, A16D, JAT, J30D into an image collection and turn the collection to bands
+        {
+        var values = [AMT_Coll, A16D_Coll, JAT_Coll, J30D_Coll];
+        var imageColl = ee.ImageCollection.fromImages(values);
+        var image = imageColl.toBands();
+        // Map.addLayer(image, {}, 'AMT, A16D, JAT, J30D Values')
+        }    
+        // STEP 2: Define values for Days calculation
+        {
+        var AMT = image.select('0_AMT');
+        var A16D = image.select('1_A16D');
+        var JAT = image.select('2_JAT');
+        var J30D = image.select('3_J30D');
+        var coeff1 = -86.6;
+        var coeff2 = A16D.multiply(2.1);
+        var coeff3 = JAT.multiply(6.2);
+        var coeff4 = AMT.multiply(-2.1);
+        } 
+        // STEP 3: Calculate rate
+        {
+        var EQUATION2 = coeff2.add(coeff1).add(coeff3).add(coeff4).rename('days');
+        var image = image.addBands(EQUATION2);
+        var days = image.select('days');
+        }
+        // STEP 4: Set vision parameters for the Layer
+        {
+        var yearParams = {
+          bands: 'days',
+          min: 0,
+          max: 365,
+        };
+       } // END STEP 4
+
+     } // END STEP 3
+     
+    } // END STEPS
+  //Map.addLayer(days, yearParams, 'DAYS AFTER FRUITSET TO ACC 0.5 G OF FRESH WEIGHT', false);
+  }
+    
+// GROWING DEGREE DAYS (Chasen & Stefan, 2019)
+  {
+  // LAYER INFORMATION
+  /*
+    TIME FRAME: 03/01 - 10/31
+    DOUBLE SINE METHOD FOR CALCULATING DEGREE DAYS (Oregon State University), (UC IPM)
+      GDD = Growing Degree Days
+      Tmax = Maximum temperature of the day
+      Tmin = Minimum temperature of the day
+      Tavg = Average temperature of the day
+      k (Demoranville et al 2019) = Base temp (7 deg C)
+      a = (Tmax - Tmin)/2
+      theta = [(k-Tavg)/a]
+      UPPER THRESHOLD = 29.4
+      LOWER THRESHOLD = 5
+      
+      // If result is negative, consider degree days as 0
+  */
+  // STEPS:
+  {
+    // STEP 1: Load image collection and convert to C
+    {var imageColl = daily.select(['temperature_2m', 'temperature_2m_min', 'temperature_2m_max']);
+    var imageColl = imageColl.map(function(image){
+      var band1 = image.select('temperature_2m').subtract(273.15).rename('Tavg_C');
+      var band2 = image.select('temperature_2m_max').subtract(273.15).rename('Tmax_C');
+      var band3 = image.select('temperature_2m_min').subtract(273.15).rename('Tmin_C');
+      var band4 = (image.select('temperature_2m_min').multiply(0)).add(1).rename('days_count');
+      var result = image.addBands([band1, band2, band3, band4]);
+      return result.select(['Tavg_C', 'Tmax_C', 'Tmin_C', 'days_count']);
+    });}
+    
+    // STEP 2: Run Calculations over the data
+    {
+      // STEP 1: Define date
+      /*{var start = ee.Date('2008-02-29');
+      var end = ee.Date('2008-10-31');
+      var imageColl = imageColl.filterDate(start, end);}*/
+      var tU = 29.4;
+      var tL = 5;
+      var pi = Math.PI;
+      
+      // STEP 2: Make an image collection with the previous day's max temp
+      {var start = ee.Date('2008-02-28');
+      var end = ee.Date('2008-11-01');
+      var collection = imageColl.filterDate(start, end);
+
+      var list = collection.sort('system:time_start', true);
+      var list2_data = collection.select('Tmax_C').sort('system:time_start', true);
+      var list = list.toList(247);
+      var quantityList = list2_data.toList(247);
+
+      var previous_temp = function(currentElement, previousResult) {
+        var prevMax = ee.Image(ee.List(previousResult).get(-1));
+        var prev = prevMax.select('Tmax_C');
+        var current = ee.Image(currentElement).select('Tmax_C').multiply(0);
+        var return1 = current.add(prev).rename('Tmax_prev');
+        var currentQuantity = ee.Image(currentElement).addBands(return1);
+        return ee.List(previousResult).add(currentQuantity);
+      };
+      
+      var quantityList = [list.get(0)];
+
+      var quantityList = ee.List(list.iterate(previous_temp, quantityList));
+      var quantityList = quantityList.reverse();
+      var quantityList = quantityList.slice(0,245);
+      
+      var start = ee.Date('2008-03-01');
+      var end = ee.Date('2008-11-01');
+      var imageColl = ee.ImageCollection(quantityList);
+      //Map.addLayer(imageColl, {}, 'PREVIOUS DAY TEMP', false);
+      }
+      
+      // STEP 3: CALCULATE DD
+      {
+    var imageColl = imageColl.map(function(image){
+      // RUN EACH DD EQUATION
+      {// EQUATION 3
+      {var data = image;
+        var tU = 29.5;
+        var tL = 5;
+      
+      var datamask = data.select('Tmax_C');
+      var mask = datamask.gt(tU);
+      var data = data.multiply(mask).set('system:time_start', image.get('system:time_start'));
+      var datamask2 = data.select('Tmin_C');
+      var mask2 = datamask2.gt(tL);
+      var data = data.multiply(mask2).set('system:time_start', image.get('system:time_start'))
+      
+      // CALCULATE DD1 
+        {var Tmin = data.select('Tmin_C');
+        var Tmax = data.select('Tmax_prev');
+        var alpha = (Tmax.subtract(Tmin)).divide(2);
+        var theta2 = ((((Tmax.add(Tmin)).divide(-2)).add(tU))
+                      .divide(alpha))
+                      .asin();
+        var coeff1 = (((Tmax.add(Tmin)).divide(2)).subtract(tL)).multiply(theta2.add(pi/2));
+        var coeff2 = ((theta2.multiply(-1)).add(pi/2)).multiply(tU - tL);
+        var coeff3 = ((theta2.cos()).multiply(alpha)).multiply(-1);
+        var DD1a = ((coeff1.add(coeff2).add(coeff3)).multiply(1/pi));
+
+        var Tmin = image.select('Tmin_C');
+        var Tmax = image.select('Tmax_prev');
+        var tL = tU;
+        var tU = (2*(tU))-tL;
+        var coeff1 = (((Tmax.add(Tmin)).divide(2)).subtract(tL)).multiply(theta2.add(pi/2));
+        var coeff2 = ((theta2.multiply(-1)).add(pi/2)).multiply(tU - tL);
+        var coeff3 = ((theta2.cos()).multiply(alpha)).multiply(-1);
+        var DD2a = ((coeff1.add(coeff2).add(coeff3)).multiply(1/pi));
+
+        var datamask4 = DD2a;
+        var mask4 = datamask4.gt(0);
+        var DD2a = DD2a.multiply(mask4).set('system:time_start', image.get('system:time_start'))
+        var datamask5 = DD1a;
+        var mask5 = datamask5.gt(0);
+        var DD1a =  DD1a.multiply(mask5).set('system:time_start', image.get('system:time_start'))
+       
+        var DD1 = (DD1a.subtract(DD2a));}
+      
+      // CALCULATE DD2 
+        {var Tmin = data.select('Tmin_C');
+        var Tmax = data.select('Tmax_C');
+        var tU = 29.5;
+        var tL = 5;
+        var alpha = (Tmax.subtract(Tmin)).divide(2);
+        var theta2 = ((((Tmax.add(Tmin)).divide(-2)).add(tU))
+                      .divide(alpha))
+                      .asin();
+        var coeff1 = (((Tmax.add(Tmin)).divide(2)).subtract(tL)).multiply(theta2.add(pi/2));
+        var coeff2 = ((theta2.multiply(-1)).add(pi/2)).multiply(tU - tL);
+        var coeff3 = ((theta2.cos()).multiply(alpha)).multiply(-1);
+        var DD1b = ((coeff1.add(coeff2).add(coeff3)).multiply(1/pi));
+
+        var Tmin = image.select('Tmin_C');
+        var Tmax = image.select('Tmax_C');
+        var tL = tU;
+        var tU = (2*(tU))-tL;
+        var coeff1 = (((Tmax.add(Tmin)).divide(2)).subtract(tL)).multiply(theta2.add(pi/2));
+        var coeff2 = ((theta2.multiply(-1)).add(pi/2)).multiply(tU - tL);
+        var coeff3 = ((theta2.cos()).multiply(alpha)).multiply(-1);
+        var DD2b = ((coeff1.add(coeff2).add(coeff3)).multiply(1/pi));
+
+        var datamask4 = DD2b;
+        var mask4 = datamask4.gt(0);
+        var DD2b = DD2b.multiply(mask4).set('system:time_start', image.get('system:time_start'))
+        var datamask5 = DD1b;
+        var mask5 = datamask5.gt(0);
+        var DD1b =  DD1b.multiply(mask5).set('system:time_start', image.get('system:time_start'))
+       
+        var DD2 = (DD1b.subtract(DD2b));}
+      
+      var DD = (DD1.add(DD2)).divide(2).rename('DD');
+        var equation3_image = data.addBands(DD).set('system:time_start', image.get('system:time_start'))};
+      
+      // EUQATION 4
+      {
+      var data = image;
+        var tU = 29.5;
+        var tL = 5;
+      
+      var datamask = data.select('Tmax_C');
+      var mask = datamask.gt(tU);
+      var data = data.multiply(mask).set('system:time_start', image.get('system:time_start'))
+      var datamask2 = data.select('Tmin_C');
+      var mask2 = datamask2.lt(tL);
+      var data = data.multiply(mask2).set('system:time_start', image.get('system:time_start'))
+      
+      // CAULCULATE DD1  
+        {var Tmin = data.select('Tmin_C');
+        var Tmax = data.select('Tmax_prev');
+        var alpha = (Tmax.subtract(Tmin)).divide(2);
+        var theta1 = ((((Tmax.add(Tmin)).divide(-2)).add(tL))
+                      .divide(alpha))
+                      .asin();
+        var theta2 = ((((Tmax.add(Tmin)).divide(-2)).add(tU))
+                      .divide(alpha))
+                      .asin();
+        var coeff1 = (((Tmax.add(Tmin)).divide(2)).subtract(tL)).multiply(theta2.subtract(theta1));
+        var coeff2 = ((theta1.cos()).subtract(theta2.cos())).multiply(alpha);
+        var coeff3 = ((theta2.multiply(-1)).add(pi/2)).multiply(tU - tL);
+        var DD1a = ((coeff1.add(coeff2).add(coeff3)).multiply(1/pi));
+
+        var Tmin = image.select('Tmin_C');
+        var Tmax = image.select('Tmax_prev');
+        var tL = tU;
+        var tU = (2*(tU))-tL;
+        var coeff1 = (((Tmax.add(Tmin)).divide(2)).subtract(tL)).multiply(theta2.subtract(theta1));
+        var coeff2 = ((theta1.cos()).subtract(theta2.cos())).multiply(alpha);
+        var coeff3 = ((theta2.multiply(-1)).add(pi/2)).multiply(tU - tL);
+        var DD2a = ((coeff1.add(coeff2).add(coeff3)).multiply(1/pi));
+
+        var datamask4 = DD2a;
+        var mask4 = datamask4.gt(0);
+        var DD2a = DD2a.multiply(mask4).set('system:time_start', image.get('system:time_start'))
+        var datamask5 = DD1a;
+        var mask5 = datamask5.gt(0);
+        var DD1a =  DD1a.multiply(mask5).set('system:time_start', image.get('system:time_start'))
+        
+        var DD1 = (DD1a.subtract(DD2a));}
+      
+      // CAULCULATE DD2  
+        {var Tmin = data.select('Tmin_C');
+        var Tmax = data.select('Tmax_C');
+        var tU = 29.5;
+        var tL = 5;
+        var alpha = (Tmax.subtract(Tmin)).divide(2);
+        var theta1 = ((((Tmax.add(Tmin)).divide(-2)).add(tL))
+                      .divide(alpha))
+                      .asin();
+        var theta2 = ((((Tmax.add(Tmin)).divide(-2)).add(tU))
+                      .divide(alpha))
+                      .asin();
+        var coeff1 = (((Tmax.add(Tmin)).divide(2)).subtract(tL)).multiply(theta2.subtract(theta1));
+        var coeff2 = ((theta1.cos()).subtract(theta2.cos())).multiply(alpha);
+        var coeff3 = ((theta2.multiply(-1)).add(pi/2)).multiply(tU - tL);
+        var DD1b = ((coeff1.add(coeff2).add(coeff3)).multiply(1/pi));
+
+        var Tmin = image.select('Tmin_C');
+        var Tmax = image.select('Tmax_C');
+        var tL = tU;
+        var tU = (2*(tU))-tL;
+        var coeff1 = (((Tmax.add(Tmin)).divide(2)).subtract(tL)).multiply(theta2.subtract(theta1));
+        var coeff2 = ((theta1.cos()).subtract(theta2.cos())).multiply(alpha);
+        var coeff3 = ((theta2.multiply(-1)).add(pi/2)).multiply(tU - tL);
+        var DD2b = ((coeff1.add(coeff2).add(coeff3)).multiply(1/pi));
+
+        var datamask4 = DD2a;
+        var mask4 = datamask4.gt(0);
+        var DD2b = DD2b.multiply(mask4).set('system:time_start', image.get('system:time_start'))
+        var datamask5 = DD1b;
+        var mask5 = datamask5.gt(0);
+        var DD1b =  DD1a.multiply(mask5).set('system:time_start', image.get('system:time_start'))
+        
+        var DD2 = (DD1b.subtract(DD2b));}
+        
+        var DD = (DD1.add(DD2)).divide(2).rename('DD');
+        var equation4_image = data.addBands(DD).set('system:time_start', image.get('system:time_start'))
+
+      }
+      
+      // EUQATION 5
+      {
+      var data = image;
+        var tU = 29.5;
+        var tL = 5;
+      
+      var datamask = data.select('Tmax_C');
+      var mask = datamask.lt(tU);
+      var data = data.multiply(mask).set('system:time_start', image.get('system:time_start'))
+      var datamask2 = data.select('Tmin_C');
+      var mask2 = datamask2.gt(tL);
+      var data = data.multiply(mask2).set('system:time_start', image.get('system:time_start'))
+      
+      // CALCULATE DD1  
+        {var Tmin = image.select('Tmin_C');
+        var Tmax = image.select('Tmax_prev');
+        var DD1a = ((Tmax.add(Tmin)).divide(2)).subtract(tL);
+
+        var Tmin = image.select('Tmin_C');
+        var Tmax = image.select('Tmax_prev');
+        var tL = tU;
+        var tU = (2*(tU))-tL;
+        var DD2a = ((Tmax.add(Tmin)).divide(2)).subtract(tL);
+
+        var datamask4 = DD2a;
+        var mask4 = datamask4.gt(0);
+        var DD2a = DD2a.multiply(mask4).set('system:time_start', image.get('system:time_start'))
+        var datamask5 = DD1a;
+        var mask5 = datamask5.gt(0);
+        var DD1a =  DD1a.multiply(mask5).set('system:time_start', image.get('system:time_start'))
+        
+        var DD1 = (DD1a.subtract(DD2a));}
+        
+      // CALCULATE DD2
+        {var Tmin = image.select('Tmin_C');
+        var Tmax = image.select('Tmax_C');
+        var tU = 29.5;
+        var tL = 5;
+        var DD1b = ((Tmax.add(Tmin)).divide(2)).subtract(tL);
+
+        var Tmin = image.select('Tmin_C');
+        var Tmax = image.select('Tmax_C');
+        var tL = tU;
+        var tU = (2*(tU))-tL;
+        var DD2b = ((Tmax.add(Tmin)).divide(2)).subtract(tL);
+
+        var datamask4 = DD2b;
+        var mask4 = datamask4.gt(0);
+        var DD2b = DD2b.multiply(mask4).set('system:time_start', image.get('system:time_start'))
+        var datamask5 = DD1b;
+        var mask5 = datamask5.gt(0);
+        var DD1b =  DD1b.multiply(mask5).set('system:time_start', image.get('system:time_start'))
+        
+        var DD2 = (DD1b.subtract(DD2b));}
+        
+        var DD = (DD1.add(DD2)).divide(2).rename('DD');
+        var equation5_image = data.addBands(DD).set('system:time_start', image.get('system:time_start'))
+      }
+      
+      // EQUATION 6
+      {
+      var data = image;
+        var tU = 29.5;
+        var tL = 5;
+      
+      var datamask = data.select('Tmax_C');
+      var mask = datamask.lt(tU);
+      var data = data.multiply(mask).set('system:time_start', image.get('system:time_start'))
+      var datamask2 = data.select('Tmin_C');
+      var mask2 = datamask2.lt(tL);
+      var data = data.multiply(mask2).set('system:time_start', image.get('system:time_start'))
+      
+      // CALCULATE DD1
+      {var Tmin = data.select('Tmin_C');
+        var Tmax = data.select('Tmax_prev');
+        var alpha = (Tmax.subtract(Tmin)).divide(2);
+        var theta1 = ((((Tmax.add(Tmin)).divide(-2)).add(tL))
+                      .divide(alpha))
+                      .asin();
+        var coeff1 = (((Tmax.add(Tmin)).divide(2)).subtract(tL)).multiply((theta1.multiply(-1)).add(pi/2));
+        var coeff2 = (theta1.cos()).multiply(alpha);
+        var DD1a = ((coeff1.add(coeff2)).multiply(1/pi));
+
+        var Tmin = image.select('Tmin_C');
+        var Tmax = image.select('Tmax_prev');
+        var tL = tU;
+        var tU = (2*(tU))-tL;
+        var coeff1 = (((Tmax.add(Tmin)).divide(2)).subtract(tL)).multiply((theta1.multiply(-1)).add(pi/2));
+        var coeff2 = (theta1.cos()).multiply(alpha);
+        var DD2a = ((coeff1.add(coeff2)).multiply(1/pi));
+
+        var datamask4 = DD2a;
+        var mask4 = datamask4.gt(0);
+        var DD2a = DD2a.multiply(mask4).set('system:time_start', image.get('system:time_start'))
+        var datamask5 = DD1a;
+        var mask5 = datamask5.gt(0);
+        var DD1a =  DD1a.multiply(mask5).set('system:time_start', image.get('system:time_start'))
+        
+        var DD1 = DD1a.subtract(DD2a);}
+      
+      // CALCULATE DD2
+      {var Tmin = data.select('Tmin_C');
+        var Tmax = data.select('Tmax_C');
+        var tU = 29.5;
+        var tL = 5;
+        var alpha = (Tmax.subtract(Tmin)).divide(2);
+        var theta1 = ((((Tmax.add(Tmin)).divide(-2)).add(tL))
+                      .divide(alpha))
+                      .asin();
+        var coeff1 = (((Tmax.add(Tmin)).divide(2)).subtract(tL)).multiply((theta1.multiply(-1)).add(pi/2));
+        var coeff2 = (theta1.cos()).multiply(alpha);
+        var DD1b = ((coeff1.add(coeff2)).multiply(1/pi));
+
+        var Tmin = image.select('Tmin_C');
+        var Tmax = image.select('Tmax_C');
+        var tL = tU;
+        var tU = (2*(tU))-tL;
+        var coeff1 = (((Tmax.add(Tmin)).divide(2)).subtract(tL)).multiply((theta1.multiply(-1)).add(pi/2));
+        var coeff2 = (theta1.cos()).multiply(alpha);
+        var DD2b = ((coeff1.add(coeff2)).multiply(1/pi));
+
+        var datamask4 = DD2b;
+        var mask4 = datamask4.gt(0);
+        var DD2b = DD2a.multiply(mask4).set('system:time_start', image.get('system:time_start'))
+        var datamask5 = DD1b;
+        var mask5 = datamask5.gt(0);
+        var DD1b =  DD1b.multiply(mask5).set('system:time_start', image.get('system:time_start'))
+        
+        var DD2 = DD1b.subtract(DD2b);}
+        
+        var DD = (DD1.add(DD2)).divide(2).rename('DD');
+        var equation6_image = data.addBands(DD).set('system:time_start', image.get('system:time_start'))
+      }
+      
+      // EQUATION 7
+      {
+      var data = image;
+        var tU = 29.5;
+        var tL = 5;
+      
+      var datamask = data.select('Tmax_C');
+      var mask = datamask.gt(tU);
+      var data = data.multiply(mask).set('system:time_start', image.get('system:time_start'))
+      var datamask2 = data.select('Tmin_C');
+      var mask2 = datamask2.gt(tU);
+      var data = data.multiply(mask2).set('system:time_start', image.get('system:time_start'))
+      
+      // CALCULATE DD1 
+        {var Tmin = data.select('Tmin_C');
+        var Tmax = data.select('Tmax_prev');
+        var DD1a = (Tmax.multiply(0)).add(tU-tL);
+
+        var Tmin = image.select('Tmin_C');
+        var Tmax = image.select('Tmax_prev');
+        var tL = tU;
+        var tU = (2*(tU))-tL;
+        var DD2a = (Tmax.multiply(0)).add(tU-tL);
+
+        var datamask4 = DD2a;
+        var mask4 = datamask4.gt(0);
+        var DD2a = DD2a.multiply(mask4).set('system:time_start', image.get('system:time_start'))
+        var datamask5 = DD1a;
+        var mask5 = datamask5.gt(0);
+        var DD1a =  DD1a.multiply(mask5).set('system:time_start', image.get('system:time_start'))
+        
+        var DD1 = DD1a.subtract(DD2a);}
+      
+      // CALCULATE DD2
+      {var Tmin = data.select('Tmin_C');
+        var Tmax = data.select('Tmax_C');
+        var DD1b = (Tmax.multiply(0)).add(tU-tL);
+
+        var Tmin = image.select('Tmin_C');
+        var Tmax = image.select('Tmax_C');
+        var tL = tU;
+        var tU = (2*(tU))-tL;
+        var DD2b = (Tmax.multiply(0)).add(tU-tL);
+
+        var datamask4 = DD2b;
+        var mask4 = datamask4.gt(0);
+        var DD2b = DD2b.multiply(mask4).set('system:time_start', image.get('system:time_start'))
+        var datamask5 = DD1b;
+        var mask5 = datamask5.gt(0);
+        var DD1b =  DD1b.multiply(mask5).set('system:time_start', image.get('system:time_start'))
+
+        var DD2 = DD1b.subtract(DD2b);}
+        
+        var DD = (DD1.add(DD2)).divide(2).rename('DD');
+        var equation7_image = data.addBands(DD).set('system:time_start', image.get('system:time_start'))
+      }
+      
+      // EQUATION 8
+      {
+      var data = image;
+        var tU = 29.5;
+        var tL = 5;
+      
+      var datamask = data.select('Tmax_C');
+      var mask = datamask.lt(tL);
+      var data = data.multiply(mask).set('system:time_start', image.get('system:time_start'))
+      var datamask2 = data.select('Tmin_C');
+      var mask2 = datamask2.lt(tL).set('system:time_start', image.get('system:time_start'))
+      var data = data.multiply(mask2)
+      
+      // CALCULATE DD1  
+        {var Tmin = data.select('Tmin_C');
+        var Tmax = data.select('Tmax_prev');
+        var DD1a = (Tmax.multiply(0));
+
+        var Tmin = image.select('Tmin_C');
+        var Tmax = image.select('Tmax_prev');
+        var tL = tU;
+        var tU = (2*(tU))-tL;
+        var DD2a = (Tmax.multiply(0));
+
+        var datamask4 = DD2a;
+        var mask4 = datamask4.gt(0);
+        var DD2a = DD2a.multiply(mask4).set('system:time_start', image.get('system:time_start'))
+        var datamask5 = DD1a;
+        var mask5 = datamask5.gt(0);
+        var DD1a =  DD1a.multiply(mask5).set('system:time_start', image.get('system:time_start'))
+        
+        var DD1 = DD1a.subtract(DD2a);}
+      
+      // CALCULATE DD2
+        {var Tmin = data.select('Tmin_C');
+        var Tmax = data.select('Tmax_C');
+        var DD1b = (Tmax.multiply(0));
+
+        var Tmin = image.select('Tmin_C');
+        var Tmax = image.select('Tmax_C');
+        var tL = tU;
+        var tU = (2*(tU))-tL;
+        var DD2b = (Tmax.multiply(0));
+
+        var datamask4 = DD2b;
+        var mask4 = datamask4.gt(0);
+        var DD2b = DD2b.multiply(mask4).set('system:time_start', image.get('system:time_start'))
+        var datamask5 = DD1b;
+        var mask5 = datamask5.gt(0);
+        var DD1b =  DD1b.multiply(mask5).set('system:time_start', image.get('system:time_start'))
+        
+        var DD2 = DD1b.subtract(DD2b);}
+        
+        var DD = (DD1.add(DD2)).divide(2).rename('DD');
+        var equation8_image = data.addBands(DD).set('system:time_start', image.get('system:time_start'))
+      }
+      }
+      
+      // MAKE A NEW IMAGE WITH MAX DD
+      var images = [equation3_image, equation4_image, equation5_image, 
+                    equation6_image, equation7_image, equation8_image]
+      var collection = ee.ImageCollection.fromImages(images);
+      var newimage = collection.max().set('system:time_start', image.get('system:time_start'))
+      
+      return newimage
+      });
+      //Map.addLayer(imageColl, {}, 'DEGREE DAYS', false);
+      }
+    }
+    
+    // STEP 3: Calculate GDD
+    {// Load MODIS EVI imagery.
+var collection = imageColl.select('DD').sort('system:time_start', true);
+  // Sort chronologically in descending order.
+
+var series = collection.map(function(image) {
+    return image.set('system:time_start', image.get('system:time_start'))
+});
+
+// Display cumulative sum.
+//Map.addLayer(series.sum(), {}, 'GDD SUM', false);
+
+// Get the timestamp from the most recent image in the reference collection.
+var time0 = collection.first().get('system:time_start');
+
+// Use imageCollection.iterate() to make a collection of cumulative anomaly over time.
+// The initial value for iterate() is a list of anomaly images already processed.
+// The first anomaly image in the list is just 0, with the time0 timestamp.
+var first = ee.List([
+  // Rename the first band 'EVI'.
+  ee.Image(0).set('system:time_start', time0).select([0], ['GDD'])
+]);
+
+// This is a function to pass to Iterate().
+// As anomaly images are computed, add them to the list.
+var accumulate = function(image, list) {
+  // Get the latest cumulative anomaly image from the end of the list with
+  // get(-1).  Since the type of the list argument to the function is unknown,
+  // it needs to be cast to a List.  Since the return type of get() is unknown,
+  // cast it to Image.
+  var previous = ee.Image(ee.List(list).get(-1));
+  // Add the current anomaly to make a new cumulative anomaly image.
+  var added = image.add(previous)
+    // Propagate metadata to the new image.
+    .set('system:time_start', image.get('system:time_start'))
+  // Return the list with the cumulative anomaly inserted.
+  return ee.List(list).add(added);
+};
+
+// Create an ImageCollection of cumulative anomaly images by iterating.
+// Since the return type of iterate is unknown, it needs to be cast to a List.
+var cumulative = (ee.List(series.iterate(accumulate, first)));
+var cumulative = cumulative.reverse();
+      var cumulative = cumulative.slice(0,245);
+      var GDD = ee.ImageCollection(cumulative).sort('system:time_start', false);
+  }
+    
+    // STEP 4: Add band with days until harvest
+    {
+      var imageColl = GDD;
+      var imageColl = imageColl.map(function(image){
+        var GDD = image.select('DD');
+        var band = (GDD.multiply(0)).add(1).rename('days_since_03_01');
+        return image.addBands(band);
+      });
+      {
+      var collection = imageColl.sort('system:time_start', true);
+      // Sort chronologically in descending order.
+
+      var series = collection.map(function(image) {
+      return image.set('system:time_start', image.get('system:time_start'))
+      });
+
+      // Get the timestamp from the most recent image in the reference collection.
+      var time0 = collection.first().get('system:time_start');
+
+      // Use imageCollection.iterate() to make a collection of cumulative anomaly over time.
+      // The initial value for iterate() is a list of anomaly images already processed.
+      // The first anomaly image in the list is just 0, with the time0 timestamp.
+      var first = ee.List([
+      // Rename the first band 'EVI'.
+      ee.Image(0).set('system:time_start', time0).select([0], ['days_since_03_01'])
+      ]);
+
+      // This is a function to pass to Iterate().
+      // As anomaly images are computed, add them to the list.
+      var accumulate = function(image, list) {
+        // Get the latest cumulative anomaly image from the end of the list with
+        // get(-1).  Since the type of the list argument to the function is unknown,
+        // it needs to be cast to a List.  Since the return type of get() is unknown,
+        // cast it to Image.
+        var previous = ee.Image(ee.List(list).get(-1));
+        var previous = previous.select('days_since_03_01')
+        // Add the current anomaly to make a new cumulative anomaly image.
+        var added = image.add(previous)
+        // Propagate metadata to the new image.
+        .set('system:time_start', image.get('system:time_start'))
+        // Return the list with the cumulative anomaly inserted.
+        return ee.List(list).add(added);
+      };
+
+      // Create an ImageCollection of cumulative anomaly images by iterating.
+      // Since the return type of iterate is unknown, it needs to be cast to a List.
+      var cumulative = (ee.List(series.iterate(accumulate, first)));
+      var cumulative = cumulative.reverse();
+          var cumulative = cumulative.slice(0,245);
+          var imageColl = ee.ImageCollection(cumulative).sort('system:time_start', true);
+          
+      var imageColl = imageColl.map(function(image){
+        var since = image.select('days_since_03_01');
+        var since = since.multiply(-1);
+        var band = since.add(245).rename('days_until_harvest');
+        return image.addBands(band);
+      });
+  }
+      var GDD = imageColl;
+    }
+  } 
+  Map.addLayer(GDD, {}, 'GDD', false);
+  } 
+  
+// ELEVATION (Evans & Spivak, 2005)
+  {
+  // LAYER INFORMATION
+  /* 
+    DATA: COPERNICUS 30M DEM
+    
+    BANDS: DEM
+  */
+  // STEPS
+    {
+      // STEP 1: Upload Digital Elevation Model 
+      {
+      var dem = dem.select('DEM');
+      var dem = dem.max();
+      var demParams = {
+        min: -500,
+        max: 10000
+      };}}
+    //Map.addLayer(dem, demParams, 'DIGITAL ELEVATION MODEL',false); 
+  } 
+
+// pH (Atucha, 2020), (Ugur et al., 2021)
+  {
+  // LAYER INFORMATION
+  /* 
+    DATA: OPENLAND SOIL pH
+    
+    BANDS: b0, b10, b30
+  */
+  // STEPS
+    {
+      // STEP 1: Upload pH 
+      {
+      var pH = pH.select(['b0', 'b10', 'b30']);
+      var pHParams = {
+        min: 0,
+        max: 7
+      };
+      // Map.addLayer(pH, pHParams, 'pH LAYER',false);
+      }
+      // STEP 2: Make an imageColl with the pH from each depth
+      {
+      var cm0 = pH.select('b0');
+      var cm10 = pH.select('b10');
+      var cm30 = pH.select('b30');
+      }
+    }
+  } 
+
+// LAND COVER
+  {
+  // LAYER INFORMATION
+  /* 
+    DATA: USDA LANDSCAPE CHANGE
+    
+    BANDS: Land_Cover
+  */
+  // STEPS
+    {
+      // STEP 1: Upload landscape layer
+      {
+      var landcover = landscape.select('Land_Cover');
+      var landParams = {
+        min: 0,
+        max: 12
+      };}
+  //Map.addLayer(landcover, landParams, 'USDA LAND COVER',false);
+  } 
+  }
+}
+
+// HABITAT SELECTION
+{
+  {
+  // HABITAT LAYER INFORMATION
+  /*
+     PARAMETERS:
+      1. Plants need at least 1,750 growing degree days to reach fruit set (Chasen & Stefan, 2019)
+      2. Plants experience abnormal blossoming if they get less than 1,500 hours 
+           of dormancy (Armstrong 2019)
+      3. Habitats must be below 1,070 meters in elevation (Evans & Spivak, 2005)
+      4. Soil must have a pH between 4.2 and 6.5 (Atucha, 2020), (Ugur et al., 2021)
+      5. Habitats must not be on impervious surfaces
+     
+     FINAL LAYER UNITS: NO UNITS
+     FINAL LAYER SCALE: 1000 m/px
+     FINAL LAYER CRS: ESPG 4269
+  */
+
+  {
+// SET PROJECTION FOR LAYERS
+var proj = ee.Projection('EPSG:4326');
+
+// PARAMETER 1: GDD > 1,750 DD
+  {{
+    var imageColl = GDD;
+    var imageColl = imageColl.map(function(image){
+    var EARLY = imageColl.filterDate('2008-06-15');
+    var EARLY = EARLY.first().set('system:time_start', image.get('system:time_start'))
+    var datamask1 = EARLY.select('DD').set('system:time_start', image.get('system:time_start'))
+    var mask1 = datamask1.lte(2019).set('system:time_start', image.get('system:time_start'))
+    var LATE = imageColl.filterDate('2008-10-31');
+    var LATE = LATE.first().set('system:time_start', image.get('system:time_start'))
+    var datamask2 = LATE.select('DD').set('system:time_start', image.get('system:time_start'))
+    var mask2 = datamask2.gte(1750).set('system:time_start', image.get('system:time_start'))
+    var return1 = image.multiply(mask1).set('system:time_start', image.get('system:time_start'))
+    var return2 = return1.multiply(mask2).set('system:time_start', image.get('system:time_start'))
+    var datamask = return2.select('DD');
+    return datamask.neq(0).set('system:time_start', image.get('system:time_start'))
+    });
+     var image = imageColl.max();
+     var datamask = image.select('DD').set('system:time_start', image.get('system:time_start'))
+     var GDD_hab = datamask.neq(0).set('system:time_start', image.get('system:time_start'))
+     var GDD_hab = GDD_hab.reproject(proj, null, 10000)
+  } 
+    //Map.addLayer(GDD_hab, {}, 'GDD MASK', false)
+  }
+  var GDD_mask = GDD_hab;
+
+// PARAMETER 2: Dormancy hours >= 1,500 h
+  {
+    // GIVE ANY PIXELS WITH A VALUE > 1,500 IN THE dormancy LAYER A VALUE OF 1
+  {
+    var image = dormancy.select('dormancy_hours');
+    var datamask = image;
+    var mask = datamask.gt(1500);
+    var dormancy_hab = mask.set('system:time_start', image.get('system:time_start'))
+    var dormancy_hab = dormancy_hab.reproject(proj, null, 10000);
+    }
+    //Map.addLayer(dormancy_hab, {}, 'DORMANCY MASK', false);
+  }
+  var DORM_mask = dormancy_hab;
+  
+// PARAMETER 3: elevation < 1,070 m
+  {
+    // GIVE ANY PIXELS WITH A VALUE < 1,700 IN THE dem LAYER A VALUE OF 1
+    {
+    var image = dem.select('DEM');
+    var datamask = image;
+    var mask = datamask.lt(1070);
+    var dem_hab = mask.set('system:time_start', image.get('system:time_start'))
+    var dem_hab = dem_hab.reproject(proj, null, 10000);
+    }
+    //Map.addLayer(dem_hab, {}, 'DEM MASK', false);
+  }
+  var DEM_mask = dem_hab;
+
+// PARAMETER 4: 4.2 <= Top Soil pH <= 5.5
+  {
+    // GIVE ANY PIXELS 4.2 <= VALUE <= 5.5 IN THE pH LAYER A VALUE OF 1
+    {
+    var image = pH;
+    // Map.addLayer(pH, {}, 'pH');
+    var cm0 = pH.select('b0');
+      var mask = cm0.gte(42);
+      var cm0 = cm0.multiply(mask);
+      // Map.addLayer(cm0, {}, 'cm0', false);
+      var mask = cm0.lte(60);
+      var cm0 = mask.set('system:time_start', image.get('system:time_start'))
+      // Map.addLayer(cm0, {}, 'cm0 pH', false);
+    var cm10 = pH.select('b10');
+    var mask = cm10.gte(42);
+      var cm10 = cm10.multiply(mask);
+      var mask = cm10.lte(60);
+      var cm10 = mask.set('system:time_start', image.get('system:time_start'))
+      // Map.addLayer(cm0, {}, 'cm10 pH', false);
+    var cm30 = pH.select('b30');
+    var mask = cm30.gte(42);
+      var cm30 = cm30.multiply(mask);
+      var mask = cm30.lte(60);
+      var cm30 = mask.set('system:time_start', image.get('system:time_start'))
+      // Map.addLayer(cm30, {}, 'cm30 pH', false);
+    var image = cm0.multiply(cm10).multiply(cm30).set('system:time_start', image.get('system:time_start'))
+    var pH_hab = image.set('system:time_start', image.get('system:time_start'))
+      var pH_hab = pH_hab.reproject(proj, null, 10000);
+    }
+    //Map.addLayer(pH_hab, {}, 'pH MASK', false);
+  }
+  var SOIL_mask = pH_hab
+
+// PARAMETER 5: Habitat must not be on impervious surfaces
+  {
+    // GIVE LAND COVER NOT ON IMPERVIOUS SURFACES A VALUE OF 1
+    {
+      var start = ('2008-01-01');
+      var end = ('2008-12-01');
+      var image = landcover.select('Land_Cover').filterDate(start, end);
+      var image = image.max().set('system:time_start', image.get('system:time_start'))
+        var datamask = image.select('Land_Cover');
+        var mask = datamask.neq(11);
+      var landcover_hab = mask.set('system:time_start', image.get('system:time_start'))
+      var landcover_hab = landcover_hab.reproject(proj, null, 10000)
+    }
+    //Map.addLayer(landcover_hab, {}, 'LAND COVER MASK', false);
+  }
+  var LAND_mask = landcover_hab
+  
+var habitats = GDD_mask.multiply(DORM_mask).multiply(DEM_mask).multiply(SOIL_mask).multiply(LAND_mask).set('system:time_start', '473385600000');
+}
+}
+Map.addLayer(habitats, {}, 'CRANBERRY HABITAT AREA', false)
+}
+
+// PREDICTED CRANBERRY WEIGHT
+{
+  // STEPS
+  {
+  var imageColl = GDD.sort('system:time_start', true);
+  var days = days.select('days');
+  var rate = rate.select('rate');
+  var days_until = imageColl.map(function(image){
+      var datamask = image.select('DD');
+      var mask = datamask.lte(1750);
+      return image.multiply(mask).set('system:time_start', image.get('system:time_start'))
+      });
+  var image = days_until.max().set('system:time_start', image.get('system:time_start'))
+  var days_since = image.select('days_since_03_01');
+  var imageColl = imageColl.map(function(image){
+  var empty_band = (image.select('DD').multiply(0));
+  var band1 = (empty_band.add(days)).rename('days');
+  var band2 = (empty_band.add(rate)).rename('rate');
+  var band3 = (empty_band.add(days_since).multiply(-1)).rename('day_GDD_1750')
+  var image = image.addBands([band1, band2, band3]);
+  var band4 = (band2.multiply(band3.add(245))).rename('cranberry_weight_g');
+  return image.addBands(band4);
+  });
+  var weight = (imageColl.select(['rate', 'day_GDD_1750', 'cranberry_weight_g']).max().set('system:time_start', GDD.get('system:time_start')));
+  }
+  //Map.addLayer(weight, {}, 'WEIGHT G', false)
+}
+
+// MAP OF RATE
+{var rate = weight.select('rate').multiply(habitats).set('system:time_start', '473385600000');
+var rate = rate.clip(states);
+var rateParams = {
+          min: 0,
+          max: 0.04,
+          palette: ['#030000', '#290000', '#540000', '#d60000', '#9c0202', '#fa8484']
+        }
+var rate = rate.reproject(proj, null, 1000)
+var rate = rate.multiply(habitats).set('system:time_start', GDD.get('system:time_start'))
+}
+Map.addLayer(rate, rateParams, 'FINAL RATE', false);
+
+// MAP OF WEIGHT
+{var weight = weight.select('cranberry_weight_g').set('system:time_start', '473385600000');
+var weight = weight.clip(states);
+var weightParams = {
+          min: 0,
+          max: 3,
+          palette: ['#030000', '#290000', '#540000', '#d60000', '#9c0202', '#fa8484']
+        }
+var weight = weight.reproject(proj, null, 1000)
+var weight = weight.multiply(habitats).set('system:time_start', GDD.get('system:time_start'))
+}
+Map.addLayer(weight, weightParams, 'FINAL WEIGHT', true);
+
+// EXPORTS
+{
+  {var state = states.filter(ee.Filter.eq('STATEFP', '55')).geometry();
+  var zipcodes = ee.FeatureCollection("TIGER/2010/ZCTA5");
+
+  var image = weight.clip(state);
+Export.image.toDrive({
+  image: image,
+  description: 'WeightWI_2008',
+  folder: 'Weights',
+  scale: 1000,
+  fileFormat: 'GEOTIFF'
+});
+  }
+  {var state = states.filter(ee.Filter.eq('STATEFP', '25')).geometry();
+  var zipcodes = ee.FeatureCollection("TIGER/2010/ZCTA5");
+
+  var image = weight.clip(state);
+Export.image.toDrive({
+  image: image,
+  description: 'WeightMA_2008',
+  folder: 'Weights',
+  scale: 1000,
+  fileFormat: 'GEOTIFF'
+});
+  }
+  {var state = states.filter(ee.Filter.eq('STATEFP', '34')).geometry();
+  var zipcodes = ee.FeatureCollection("TIGER/2010/ZCTA5");
+
+  var image = weight.clip(state);
+Export.image.toDrive({
+  image: image,
+  description: 'WeightNJ_2008',
+  folder: 'Weights',
+  scale: 1000,
+  fileFormat: 'GEOTIFF'
+});
+  }
+  {var state = states.filter(ee.Filter.eq('STATEFP', '53')).geometry();
+  var zipcodes = ee.FeatureCollection("TIGER/2010/ZCTA5");
+
+  var image = weight.clip(state);
+Export.image.toDrive({
+  image: image,
+  description: 'WeightWA_2008',
+  folder: 'Weights',
+  fileFormat: 'GEOTIFF'
+});
+  }
+  {var state = states.filter(ee.Filter.eq('STATEFP', '41')).geometry();
+  var zipcodes = ee.FeatureCollection("TIGER/2010/ZCTA5");
+
+  var image = weight.clip(state);
+Export.image.toDrive({
+  image: image,
+  description: 'WeightOR_2008',
+  folder: 'Weights',
+  scale: 1000,
+  fileFormat: 'GEOTIFF'
+});
+  }
+}
