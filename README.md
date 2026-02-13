@@ -1,6 +1,6 @@
 TITLE: Cranberry Habitat and Weight Approximation (2001-2025)
    AUTHOR: Kaylan Soares
-   WORKS CITED:{
+   WORKS CITED:
     Armstrong, C. (2019). Cranberries and a Changing Climate. Cooperative Extension: Cranberries. https://extension.umaine.edu/cranberries/grower-services/workshops-and-meetings/cranberries-and-a-changing-climate/ 
     Atucha, A. (2020). Adjusting Soil pH for Cranberry Production. Cranberry Crop Management Journal, 33(1). https://doi.org/https://fruit.wisc.edu/wp-content/uploads/sites/36/2020/05/CCMJ-4-29-20.pdf 
     Chasen, E., & Stefan, S. (2019). Linking Growing Degree-Days and Cranberry Plant Phenology, 30(3), 4–6. https://fruit.wisc.edu/wp-content/uploads/sites/36/2019/09/05.22.2019_CCMJ.pdf 
