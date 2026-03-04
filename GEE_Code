@@ -1,16 +1,16 @@
 /* TITLE: Cranberry Habitat and Weight Approximation (2001-2025)
    AUTHOR: Kaylan Soares
    WORKS CITED:{
-    Armstrong, C. (2019). Cranberries and a Changing Climate. Cooperative Extension: Cranberries. https://extension.umaine.edu/cranberries/grower-services/workshops-and-meetings/cranberries-and-a-changing-climate/ 
+    Armstrong, C. (2016). Cranberries and a Changing Climate. Cooperative Extension: Cranberries. https://extension.umaine.edu/cranberries/grower-services/workshops-and-meetings/cranberries-and-a-changing-climate/ 
     Atucha, A. (2020). Adjusting Soil pH for Cranberry Production. Cranberry Crop Management Journal, 33(1). https://doi.org/https://fruit.wisc.edu/wp-content/uploads/sites/36/2020/05/CCMJ-4-29-20.pdf 
-    Chasen, E., & Stefan, S. (2019). Linking Growing Degree-Days and Cranberry Plant Phenology, 30(3), 4–6. https://fruit.wisc.edu/wp-content/uploads/sites/36/2019/09/05.22.2019_CCMJ.pdf 
-    DeMoranville, C. J., Davenport, J. R., Patten, K., Roper, T. R., Strik, B. C., Vorsa, N., & Poole, A. P. (2019). Fruit Mass Development in Three Cranberry Cultivars and Five Production Regions. Journal of the American Society for Horticultural Science, 121(4), 680–685. 
+    Chasen, E., & Stefan, S. (2017). Linking Growing Degree-Days and Cranberry Plant Phenology, 30(3), 4–6. https://fruit.wisc.edu/wp-content/uploads/sites/36/2017/09/05.22.2017_CCMJ.pdf 
+    DeMoranville, C. J., Davenport, J. R., Patten, K., Roper, T. R., Strik, B. C., Vorsa, N., & Poole, A. P. (1996). Fruit Mass Development in Three Cranberry Cultivars and Five Production Regions. Journal of the American Society for Horticultural Science, 121(4), 680–685. 
     Evans, E. C., & M Spivak. (2005). Effects of Honey Bee (Hymenoptera: Apidae) and Bumble Bee (Hymenoptera: Apidae) Presence on Cranberry (Ericales: Ericaceae) Pollination. Journal of Economic Entomology, 99(3), 614–620. 
     Oregon State University. (n.d.). Degree-day calculation methods. https://hopper.science.oregonstate.edu/CalcMethods.html#I1 
     Stang, E. J. (n.d.). CRANBERRY FRUIT SET: PROBLEMS AND POTENTIALS. University of Wisconsin -  Department of Horticulture. 
     Ugur, S., Hahn, E., & Mura, J. D. (2021, September 15). High Soil pH: Understanding Plant Nutrition in Cranberries. Wisconsin Fruit. https://fruit.wisc.edu/2021/06/29/high-soil-ph-understanding-plant-nutrition-in-cranberries/ 
     University of California Agriculture and Natural Resources Statewide Integrated Pest Management Program - UC IPM. (n.d.). Degree Days Single Sine Methods. Degree-Days: Single Sine Methods--UC IPM. https://ipm.ucanr.edu/WEATHER/ddss_tbl.html 
-    University of Maine. (2019, February 6). Maine Cranberry Management Calendar. Cooperative Extension: Cranberries.}
+    University of Maine. (2019, February 6). Maine Cranberry Management Calendar. Cooperative Extension: Cranberries. }
    PURPOSE: To calculate cranberry habitat change from 2001 - 2005. 
             To show the reason for cranberry habitat change from 2001-2005.
             To calculate average cranberry weight from 2001 - 2005.
@@ -51,26 +51,25 @@
       5. pH: pH
       6. water: %
       7. soil: refer to source information
-      8. landcover: refer to source information
-      9. landchange: refer to source information
+      8. landcover: refer to source informationho
       10. GDD: degree days
   */
 }
 // DORMANCY (Chasen & Stefan, 2019)
   {// LAYER INFORMATION
-    /*  
+    {/*  
       TIME FRAME: 12/01 - 03/01
       
       DATA: ERA 5 LAND HOURLY AGGREGATES
       
       BANDS: dormancy
-    */
+    */}
     // STEPS 
       {
       // STEP 1: Filter Image collection by time frame and select the temperature 2m band
       {
-       var start = ee.Date('2007-12-01');
-       var end = ee.Date('2008-03-01');
+       var start = ee.Date('2024-12-01');
+       var end = ee.Date('2025-03-01');
        var imageColl = hourly.select('temperature_2m').filterDate(start, end);
        var kParams = {
           min: 250,
@@ -83,7 +82,7 @@
       {
        var imageColl = imageColl.map(function(image){
        var band = image.select('temperature_2m').subtract(273.15).rename('deg_C');
-       return image.addBands(band).set('system:time_start', image.get('system:time_start'))
+       return image.addBands(band).set('system:time_start', image.get('system:time_start'));
        });
        var cParams = {
           min: 0,
@@ -98,14 +97,14 @@
        var imageColl = imageColl.map(function(image){
        var datamask = image.select('deg_C');
        var mask = datamask.lt(7.2);
-       return mask.set('system:time_start', image.get('system:time_start'))
+       return mask.set('system:time_start', image.get('system:time_start'));
        });
        //Map.addLayer(imageColl, {}, 'DORMANCY TEMP > 7 DEG C MASK', false);
       } // END STEP 3
 
     // STEP 4: Add up hours with temperature returns less than 7 degrees C
       {
-       var image = imageColl.sum().set('system:time_start', hourly.get('system:time_start'))
+       var image = imageColl.sum().set('system:time_start', hourly.get('system:time_start'));
        var dormancy_params = {
           min: 0,
           max: 3000,
@@ -115,7 +114,7 @@
     // STEP 5: Make a layer with pixels that have greater than 1,500 hours
       {
        var band = image.select('deg_C').multiply(1).rename('dormancy_hours');
-       var image = image.addBands(band).set('system:time_start', image.get('system:time_start'))
+       var image = image.addBands(band).set('system:time_start', image.get('system:time_start'));
        var dormancy = image.select('dormancy_hours');
        } // END STEP 5
 
@@ -128,7 +127,7 @@
 // RATE OF FRESH MASS GROWTH (Demoranville et al 2019a)
   {
     // LAYER INFORMATION
-    /*
+    {/*
         R = Rate of fresh fruit mass accumulation after fruit set g/ day 
         AMT = August average maximum temperature (C)
         J30D = Number of days in July where the maximum temperature was above 30 deg C
@@ -136,7 +135,7 @@
       DATA: ERA 5 LAND HOURLY AGGREGATES, ERA 5 LAND DAILY AGGREGATES
       
       BANDS: days
-      */
+      */}
     // STEPS 
      {
       // STEP 1: Calculate AMT
@@ -145,17 +144,17 @@
       {
         // STEP 1: Filter image collection by time frame and select the temperature 2m max band
         {
-        var start = ee.Date('2008-08-01');
-        var finish = ee.Date('2008-08-31');
+        var start = ee.Date('2025-08-01');
+        var finish = ee.Date('2025-08-31');
         var imageColl = daily.select('temperature_2m_max').filterDate(start, finish); 
         // Map.addLayer(imageColl, kParams, 'Maximum August Temp (K)')
           } // END STEP 1
           
         // STEP 2: Make layer that displays mean August maximum temperature 
         {
-        var mean = imageColl.mean().set('system:time_start', imageColl.get('system:time_start'))
+        var mean = imageColl.mean().set('system:time_start', imageColl.get('system:time_start'));
         var band = mean.select('temperature_2m_max').subtract(273.15).rename('AMT');
-        var mean = mean.addBands(band).set('system:time_start', mean.get('system:time_start'))
+        var mean = mean.addBands(band).set('system:time_start', mean.get('system:time_start'));
         //Map.addLayer(mean.select('temperature_2m_max'), cParams, 'MAXIMUM AUGUST TEMPERATURE (C)', false);
         var AMT_Coll = mean.select('AMT');
         } // END STEP 2
@@ -167,12 +166,12 @@
       
       // STEP 2: Calculate J30D
       {
-      // J30D: Number of days in July where the temperature is above 30 degrees
+      // J30D: Number of days in July where the maximum temperature is above 30 degrees
       {
         // STEP 1: Filter image collection by time frame and select the temperature 2m max band
         {
-        var start = ee.Date('2008-07-01');
-        var end = ee.Date('2008-07-31');
+        var start = ee.Date('2025-07-01');
+        var end = ee.Date('2025-07-31');
         var imageColl = daily.select('temperature_2m_max').filterDate(start, end);
         // Map.addLayer(imageColl, kParams, 'July Maximum Temperature (K)')
         } // END STEP 1
@@ -192,7 +191,7 @@
         var imageColl = imageColl.map(function(image){
           var datamask = image.select('deg_C');
           var mask = datamask.gt(30);
-          return mask.set('system:time_start', image.get('system:time_start'))
+          return mask.set('system:time_start', image.get('system:time_start'));
         });
         //Map.addLayer(imageColl, {}, 'JULY MAX TEMP > 30 DEG C MASK', false);
         } // END STEP 3
@@ -225,7 +224,7 @@
         {
         var values = [AMT_Coll, J30D_Coll];
         var imageColl = ee.ImageCollection.fromImages(values);
-        var image = imageColl.toBands().set('system:time_start', image.get('system:time_start'))
+        var image = imageColl.toBands().set('system:time_start', image.get('system:time_start'));
         //Map.addLayer(image, {}, 'RATE CALCULATIONS AMT AND J30D VALUES', false);
         } // END STEP 1
 
@@ -283,8 +282,8 @@
       {
         // STEP 1: Filter image collection by time frame and select the temperature 2m max band
         {
-        var start = ee.Date('2008-08-01');
-        var end = ee.Date('2008-08-31');
+        var start = ee.Date('2025-08-01');
+        var end = ee.Date('2025-08-31');
         var imageColl = daily.select('temperature_2m_min').filterDate(start, end);
         //Map.addLayer(imageColl, kParams, 'August Minimum Temperature (K)')
         } // END STEP 1
@@ -328,8 +327,8 @@
       {
         // STEP 1: Filter image collection by time frame and select the temperature 2m max band
         {
-        var start = ee.Date('2008-07-01');
-        var finish = ee.Date('2008-07-31');
+        var start = ee.Date('2025-07-01');
+        var finish = ee.Date('2025-07-31');
         var imageColl = hourly.select('temperature_2m').filterDate(start, finish); 
           } // END STEP 1
           
@@ -422,17 +421,14 @@
     
     // STEP 2: Run Calculations over the data
     {
-      // STEP 1: Define date
-      /*{var start = ee.Date('2008-02-29');
-      var end = ee.Date('2008-10-31');
-      var imageColl = imageColl.filterDate(start, end);}*/
+      // STEP 1: Define values
       var tU = 29.4;
       var tL = 5;
       var pi = Math.PI;
       
       // STEP 2: Make an image collection with the previous day's max temp
-      {var start = ee.Date('2008-02-28');
-      var end = ee.Date('2008-11-01');
+      {var start = ee.Date('2025-02-28');
+      var end = ee.Date('2025-11-01');
       var collection = imageColl.filterDate(start, end);
 
       var list = collection.sort('system:time_start', true);
@@ -455,8 +451,8 @@
       var quantityList = quantityList.reverse();
       var quantityList = quantityList.slice(0,245);
       
-      var start = ee.Date('2008-03-01');
-      var end = ee.Date('2008-11-01');
+      var start = ee.Date('2025-03-01');
+      var end = ee.Date('2025-11-01');
       var imageColl = ee.ImageCollection(quantityList);
       //Map.addLayer(imageColl, {}, 'PREVIOUS DAY TEMP', false);
       }
@@ -1097,11 +1093,11 @@ var proj = ee.Projection('EPSG:4326');
   {{
     var imageColl = GDD;
     var imageColl = imageColl.map(function(image){
-    var EARLY = imageColl.filterDate('2008-06-15');
+    var EARLY = imageColl.filterDate('2025-06-15');
     var EARLY = EARLY.first().set('system:time_start', image.get('system:time_start'))
     var datamask1 = EARLY.select('DD').set('system:time_start', image.get('system:time_start'))
     var mask1 = datamask1.lte(2019).set('system:time_start', image.get('system:time_start'))
-    var LATE = imageColl.filterDate('2008-10-31');
+    var LATE = imageColl.filterDate('2025-10-31');
     var LATE = LATE.first().set('system:time_start', image.get('system:time_start'))
     var datamask2 = LATE.select('DD').set('system:time_start', image.get('system:time_start'))
     var mask2 = datamask2.gte(1750).set('system:time_start', image.get('system:time_start'))
@@ -1184,8 +1180,8 @@ var proj = ee.Projection('EPSG:4326');
   {
     // GIVE LAND COVER NOT ON IMPERVIOUS SURFACES A VALUE OF 1
     {
-      var start = ('2008-01-01');
-      var end = ('2008-12-01');
+      var start = ('2024-01-01');
+      var end = ('2024-12-01');
       var image = landcover.select('Land_Cover').filterDate(start, end);
       var image = image.max().set('system:time_start', image.get('system:time_start'))
         var datamask = image.select('Land_Cover');
@@ -1253,7 +1249,7 @@ var weightParams = {
           palette: ['#030000', '#290000', '#540000', '#d60000', '#9c0202', '#fa8484']
         }
 var weight = weight.reproject(proj, null, 1000)
-var weight = weight.multiply(habitats).set('system:time_start', GDD.get('system:time_start'))
+var weight = weight.multiply(habitats)
 }
 Map.addLayer(weight, weightParams, 'FINAL WEIGHT', true);
 
@@ -1265,7 +1261,7 @@ Map.addLayer(weight, weightParams, 'FINAL WEIGHT', true);
   var image = weight.clip(state);
 Export.image.toDrive({
   image: image,
-  description: 'WeightWI_2008',
+  description: 'WeightWI_2025',
   folder: 'Weights',
   scale: 1000,
   fileFormat: 'GEOTIFF'
@@ -1277,7 +1273,7 @@ Export.image.toDrive({
   var image = weight.clip(state);
 Export.image.toDrive({
   image: image,
-  description: 'WeightMA_2008',
+  description: 'WeightMA_2025',
   folder: 'Weights',
   scale: 1000,
   fileFormat: 'GEOTIFF'
@@ -1289,7 +1285,7 @@ Export.image.toDrive({
   var image = weight.clip(state);
 Export.image.toDrive({
   image: image,
-  description: 'WeightNJ_2008',
+  description: 'WeightNJ_2025',
   folder: 'Weights',
   scale: 1000,
   fileFormat: 'GEOTIFF'
@@ -1301,7 +1297,7 @@ Export.image.toDrive({
   var image = weight.clip(state);
 Export.image.toDrive({
   image: image,
-  description: 'WeightWA_2008',
+  description: 'WeightWA_2025',
   folder: 'Weights',
   fileFormat: 'GEOTIFF'
 });
@@ -1312,7 +1308,7 @@ Export.image.toDrive({
   var image = weight.clip(state);
 Export.image.toDrive({
   image: image,
-  description: 'WeightOR_2008',
+  description: 'WeightOR_2025',
   folder: 'Weights',
   scale: 1000,
   fileFormat: 'GEOTIFF'
